@@ -24,7 +24,7 @@ import yaml
 from yaml.loader import SafeLoader
 
 
-client = OpenAI(api_key="sk-proj-8AsfbYoGF9cwxBwKDk7IT3BlbkFJW3jkvuTi1KfqkuPKAR73")
+client = OpenAI(api_key="")
 col1,=st.columns(1)
 with col1:
     st.image('uk_co_logo.jpg',width=150)
