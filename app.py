@@ -42,8 +42,8 @@ authenticator = stauth.Authenticate(
     config['cookie']['expiry_days'],
     config['pre-authorized']
 )
-# names = ["Saif Ali Khan", "Sid Pai"]
-# usernames = ["saifkhan@ukco.in", "sid@ukco.in"]
+names = ["Saif Ali Khan", "Sid Pai"]
+usernames = ["saifkhan@ukco.in", "sid@ukco.in"]
 
 # load hashed passwords
 # file_path = Path(__file__).parent / "hashed_pw.pkl"
@@ -66,7 +66,7 @@ authenticator = stauth.Authenticate(
 # authenticator = stauth.Authenticate(names, usernames, hashed_passwords,"DataBase Assistant", "abcdef", cookie_expiry_days=30)
 
 # name, authenticator.login(form_name='main'), username = authenticator.login("Login", "main")
-name, authentication_status, username = authenticator.login(form_name='Login')
+name, authentication_status, username = authenticator.login()
 
 @st.cache_data
 def fetch_data_from_mysql():
@@ -178,7 +178,7 @@ if authentication_status == None:
 if authentication_status:
     # st.write("Done")
     authenticator.logout("Logout", "main")
-    st.sidebar.title(f"Welcome {authenticator.login(form_name='main')[0]}")
+    st.sidebar.title(f"Welcome {name}")
     print(authenticator.login(form_name='main')[0])
     # Main function to run the Streamlit app
     def main():
