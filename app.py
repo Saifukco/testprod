@@ -32,23 +32,23 @@ with col1:
 
 
 # --- USER AUTHENTICATION ---
-# with open('config.yaml') as file:
-#     config = yaml.load(file, Loader=SafeLoader)
+with open('config.yaml') as file:
+    config = yaml.load(file, Loader=SafeLoader)
 
-# authenticator = stauth.Authenticate(
-#     config['credentials'],
-#     config['cookie']['name'],
-#     config['cookie']['key'],
-#     config['cookie']['expiry_days'],
-#     config['pre-authorized']
-# )
-names = ["Saif Ali Khan", "Sid Pai"]
-usernames = ["saifkhan@ukco.in", "sid@ukco.in"]
+authenticator = stauth.Authenticate(
+    config['credentials'],
+    config['cookie']['name'],
+    config['cookie']['key'],
+    config['cookie']['expiry_days'],
+    config['pre-authorized']
+)
+# names = ["Saif Ali Khan", "Sid Pai"]
+# usernames = ["saifkhan@ukco.in", "sid@ukco.in"]
 
 # load hashed passwords
-file_path = Path(__file__).parent / "hashed_pw.pkl"
-with file_path.open("rb") as file:
-    hashed_passwords = pickle.load(file)
+# file_path = Path(__file__).parent / "hashed_pw.pkl"
+# with file_path.open("rb") as file:
+#     hashed_passwords = pickle.load(file)
 
 # credentials = {
 #         "usernames":{
@@ -63,7 +63,7 @@ with file_path.open("rb") as file:
 #             }
 #         }
 
-authenticator = stauth.Authenticate(names, usernames, hashed_passwords,"DataBase Assistant", "abcdef", cookie_expiry_days=30)
+# authenticator = stauth.Authenticate(names, usernames, hashed_passwords,"DataBase Assistant", "abcdef", cookie_expiry_days=30)
 
 # name, authenticator.login(form_name='main'), username = authenticator.login("Login", "main")
 name, authentication_status, username = authenticator.login('Login', 'main')
