@@ -66,7 +66,7 @@ authenticator = stauth.Authenticate(
 # authenticator = stauth.Authenticate(names, usernames, hashed_passwords,"DataBase Assistant", "abcdef", cookie_expiry_days=30)
 
 # name, authenticator.login(form_name='main'), username = authenticator.login("Login", "main")
-name, authentication_status, username = authenticator.login('Login', 'main')
+name, authentication_status, username = authenticator.login(form_name='Login')
 
 @st.cache_data
 def fetch_data_from_mysql():
