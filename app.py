@@ -1,4 +1,5 @@
 import streamlit as st
+import os
 import streamlit_authenticator as stauth
 from pathlib import Path
 import time
@@ -23,8 +24,8 @@ from datetime import datetime, timedelta
 import yaml
 from yaml.loader import SafeLoader
 
-
-client = OpenAI(api_key="")
+openai_secret_key = os.getenv('openaikey')
+client = OpenAI(api_key=openai_secret_key)
 col1,=st.columns(1)
 with col1:
     st.image('uk_co_logo.jpg',width=150)
