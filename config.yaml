@@ -1,0 +1,21 @@
+credentials:
+  usernames:
+    saifkhan@ukco.in:
+      email: saifkhan@ukco.in
+      failed_login_attempts: 0 # Will be managed automatically
+      logged_in: False # Will be managed automatically
+      name: Saif Ali Khan
+      password: 123 # Will be hashed automatically
+    sid@ukco.in:
+      email: sid@ukco.in
+      failed_login_attempts: 0 # Will be managed automatically
+      logged_in: False # Will be managed automatically
+      name: Sid Pai
+      password: 456 # Will be hashed automatically
+cookie:
+  expiry_days: 30
+  key: some_signature_key # Must be string
+  name: some_cookie_name
+pre-authorized:
+  emails:
+  - melsby@ukco.in

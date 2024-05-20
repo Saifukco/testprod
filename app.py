@@ -1,0 +1,407 @@
+import streamlit as st
+import streamlit_authenticator as stauth
+from pathlib import Path
+import time
+from math import radians, cos, sin, asin, sqrt
+from streamlit_dynamic_filters import DynamicFilters
+import pandas as pd
+import pyodbc
+# import pypyodbc as odbc
+import io
+import json
+import plotly.express as px
+import plotly.graph_objects as go
+import base64
+import os
+import json
+import pickle
+import uuid
+import re
+from openai import OpenAI
+import datetime
+from datetime import datetime, timedelta
+import yaml
+from yaml.loader import SafeLoader
+
+
+client = OpenAI(api_key="")
+col1,=st.columns(1)
+with col1:
+    st.image('uk_co_logo.jpg',width=150)
+
+
+# --- USER AUTHENTICATION ---
+# with open('config.yaml') as file:
+#     config = yaml.load(file, Loader=SafeLoader)
+
+# authenticator = stauth.Authenticate(
+#     config['credentials'],
+#     config['cookie']['name'],
+#     config['cookie']['key'],
+#     config['cookie']['expiry_days'],
+#     config['pre-authorized']
+# )
+names = ["Saif Ali Khan", "Sid Pai"]
+usernames = ["saifkhan@ukco.in", "sid@ukco.in"]
+
+# load hashed passwords
+file_path = Path(__file__).parent / "hashed_pw.pkl"
+with file_path.open("rb") as file:
+    hashed_passwords = pickle.load(file)
+
+# credentials = {
+#         "usernames":{
+#             usernames[0]:{
+#                 "name":names[0],
+#                 "password":passwords[0]
+#                 },
+#             usernames[1]:{
+#                 "name":names[1],
+#                 "password":passwords[1]
+#                 }            
+#             }
+#         }
+
+authenticator = stauth.Authenticate(names, usernames, hashed_passwords,"DataBase Assistant", "abcdef", cookie_expiry_days=30)
+
+# name, authenticator.login(form_name='main'), username = authenticator.login("Login", "main")
+name, authentication_status, username = authenticator.login('Login', 'main')
+
+@st.cache_data
+def fetch_data_from_mysql():
+    conn_str="Driver={ODBC Driver 18 for SQL Server};Server=tcp:ukcotestserver.database.windows.net,1433;Database=ukcotestdb;Uid=Saif;Pwd=Ukcotest@;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
+    with pyodbc.connect(conn_str) as conn:
+        query = '''
+            SELECT * FROM Naturo.NaturoSecondarySales3;
+        '''
+
+        df = pd.read_sql(sql=query, con=conn)
+
+    df['orderdate']=df['orderdate'].apply(lambda x :datetime.strptime(x, '%Y-%m-%d').date())
+
+    return df
+
+
+def download_button(object_to_download, download_filename, button_text, pickle_it=False):
+    """
+    Generates a link to download the given object_to_download.
+    Params:
+    ------
+    object_to_download:  The object to be downloaded.
+    download_filename (str): filename and extension of file. e.g. mydata.csv,
+    some_txt_output.txt download_link_text (str): Text to display for download
+    link.
+    button_text (str): Text to display on download button (e.g. 'click here to download file')
+    pickle_it (bool): If True, pickle file.
+    Returns:
+    -------
+    (str): the anchor tag to download object_to_download
+    Examples:
+    --------
+    download_link(your_df, 'YOUR_DF.csv', 'Click to download data!')
+    download_link(your_str, 'YOUR_STRING.txt', 'Click to download text!')
+    """
+    if pickle_it:
+        try:
+            object_to_download = pickle.dumps(object_to_download)
+        except pickle.PicklingError as e:
+            st.write(e)
+            return None
+
+    else:
+        if isinstance(object_to_download, bytes):
+            pass
+
+        elif isinstance(object_to_download, pd.DataFrame):
+            #object_to_download = object_to_download.to_csv(index=False)
+            towrite = io.BytesIO()
+            object_to_download = object_to_download.to_excel(towrite, index=False, header=True)
+            towrite.seek(0)
+
+        # Try JSON encode for everything else
+        else:
+            object_to_download = json.dumps(object_to_download)
+
+    try:
+        # some strings <-> bytes conversions necessary here
+        b64 = base64.b64encode(object_to_download.encode()).decode()
+
+    except AttributeError as e:
+        b64 = base64.b64encode(towrite.read()).decode()
+
+    button_uuid = str(uuid.uuid4()).replace('-', '')
+    button_id = re.sub('\d+', '', button_uuid)
+
+    custom_css = f""" 
+        <style>
+            #{button_id} {{
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                background-color: rgb(255, 255, 255);
+                color: rgb(38, 39, 48);
+                padding: .25rem .75rem;
+                position: relative;
+                text-decoration: none;
+                border-radius: 4px;
+                border-width: 1px;
+                border-style: solid;
+                border-color: rgb(230, 234, 241);
+                border-image: initial;
+            }} 
+            #{button_id}:hover {{
+                border-color: rgb(246, 51, 102);
+                color: rgb(246, 51, 102);
+            }}
+            #{button_id}:active {{
+                box-shadow: none;
+                background-color: rgb(246, 51, 102);
+                color: white;
+                }}
+        </style> """
+
+    dl_link = custom_css + f'<a download="{download_filename}" id="{button_id}" href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}">{button_text}</a><br></br>'
+
+    return dl_link
+
+
+
+
+if authentication_status == False:
+    st.error("Username/password is incorrect")
+
+if authentication_status == None:
+    st.warning("Please enter your username and password")
+
+
+if authentication_status:
+    # st.write("Done")
+    authenticator.logout("Logout", "main")
+    st.sidebar.title(f"Welcome {authenticator.login(form_name='main')[0]}")
+    print(authenticator.login(form_name='main')[0])
+    # Main function to run the Streamlit app
+    def main():
+        st.title(' :robot_face: DataBase Assistant')
+        filename = 'Result.xlsx'
+        # Loading animation while fetching data
+        with st.spinner('Loading data...'):
+            # Fetch data from MySQL database
+            df = fetch_data_from_mysql()
+         # ---- SIDEBAR ----
+        with st.sidebar:
+            st.write("Select Date Range")
+
+        with st.sidebar:
+            start_date = st.date_input("Start Date", df['orderdate'].min())
+            end_date = st.date_input("End Date", df['orderdate'].max())
+            # Filter the DataFrame based on the selected date range
+        filtered_df = df[(df['orderdate'] >= start_date) & (df['orderdate'] <= end_date)]
+
+
+
+        def pie_chart_states(states=None,fy=None):
+            fig_pie = px.pie(filtered_df, values='price', names='state',
+                    title='Emp Conribution')
+            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+            return st.plotly_chart(fig_pie),str(dict(filtered_df.groupby([("state")]).aggregate({'price':'sum'})))
+
+        input_text=st.text_input(label="Ask your question...")
+        if input_text:
+            messages = [{"role": "user", "content": "Yor are acting as a search engine of sales data base. And the sale is in Indian Rupees"}]
+            messages.append({"role": "user", "content": input_text})
+            tools = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "pie_chart_states",
+                        "description": "This function shows the distribution of sales in differetnt Indian states. The states are Kerala, Tamil Nadu, Andhra Pradesh, Telangana, Karnataka,Puducherry, Pondicherry. This returns a plotly pie chart. And also gives the overall summary using the dictionary given",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "states": {
+                                    "type": "string",
+                                    "description": "The Indian state, e.g. Kerala, Tamil Nadu, Andhra Pradesh, Telangana, Karnataka,Puducherry, Pondicherry it can be multiple states or a single state, use the full names",
+                                },
+                                "fy": {"type": "string", "description":"This the Indian Financial years like FY 21 ,FY 22 ,FY 23 ,FY 24 and so on. if it is FY 21 it means Financial year 2021. these are the values in data FY 21 ,FY 22 ,FY 23 ,FY 24"},
+                            },
+                    },
+                },
+                },
+                {
+                "type": "function",
+                    "function": {
+                        "name": "trend_chart",
+                        "description": "This function shows the trend chart using plotly line chart for the given states it can be multiple states or a single state and also explains the over analysis and the sale growth or degrowth overtime, And also gives the overall summary using the dictionary give",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "states": {
+                                    "type": "string",
+                                    "description": "The Indian state, e.g. Kerala, Tamil Nadu, Andhra Pradesh, Telangana, Karnataka,Puducherry, Pondicherry it can be multiple states or a single state, use the full names",
+                                },
+                                "fy": {"type": "string", "description":"This the Indian Financial years like FY 21 ,FY 22 ,FY 23 ,FY 24 and so on. if it is FY 21 it means Financial year 2021. these are the values in data FY 21 ,FY 22 ,FY 23 ,FY 24"},
+                            },
+                        }, 
+                    },  
+                },
+                {
+                "type": "function",
+                    "function": {
+                        "name": "outlets_metrics",
+                        "description": "This function shows the metrices of the outlets",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "states": {
+                                    "type": "string",
+                                    "description": "The Indian state, e.g. Kerala, Tamil Nadu, Andhra Pradesh, Telangana, Karnataka,Puducherry, Pondicherry it can be multiple states or a single state, use the full names. And also gives the overall summary using the dictionary give",
+                                },
+                                "fy": {"type": "string", "description":"This the Indian Financial years like FY 21 ,FY 22 ,FY 23 ,FY 24 and so on. if it is FY 21 it means Financial year 2021. these are the values in data FY 21 ,FY 22 ,FY 23 ,FY 24"},
+                            },
+                    },
+                    },   
+                },
+                {
+                "type": "function",
+                "function": {
+                    "name": "map_chart",
+                    "description": "This function displays the outlets or the retailor shop locations on the map using plotly scatter_mapbox and also the table which sale by state and outlet. And also gives the overall summary using the dictionary given based on top performing oultes",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "states": {
+                                "type": "string",
+                                "description": "The Indian state, e.g. Kerala, Tamil Nadu, Andhra Pradesh, Telangana, Karnataka,Puducherry, Pondicherry it can be multiple states or a single state, use the full names",
+                            },
+                            "fy": {"type": "string", "description":"This the Indian Financial years like FY 21 ,FY 22 ,FY 23 ,FY 24 and so on. if it is FY 21 it means Financial year 2021. these are the values in data FY 21 ,FY 22 ,FY 23 ,FY 24"},
+                        },
+                        "required": ["states"],
+                    },
+                },
+                },
+                {
+                "type": "function",
+                    "function": {
+                        "name": "top_sel_sku",
+                        "description": "This function gives the top selling SKU's that is Stock Keeping Units. If the states are mentioned it considers the states as well. SKU's and Stock Keeping Units are same",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "states": {
+                                    "type": "string",
+                                    "description": "The Indian state, e.g. Kerala, Tamil Nadu, Andhra Pradesh, Telangana, Karnataka,Puducherry, Pondicherry it can be multiple states or a single state, use the full names",
+                                },
+                                "fy": {"type": "string", "description":"This the Indian Financial years like FY 21 ,FY 22 ,FY 23 ,FY 24 and so on. if it is FY 21 it means Financial year 2021. these are the values in data FY 21 ,FY 22 ,FY 23 ,FY 24"},
+                            },
+                        }, 
+                    },  
+                },
+                {
+                "type": "function",
+                    "function": {
+                        "name": "top_salesmen",
+                        "description": "This function gives the top salesmen by their average sales in respective sates, and ASM that is Area Sales manager",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "states": {
+                                    "type": "string",
+                                    "description": "The Indian state, e.g. Kerala, Tamil Nadu, Andhra Pradesh, Telangana, Karnataka,Puducherry, Pondicherry it can be multiple states or a single state, use the full names",
+                                },
+                                "fy": {"type": "string", "description":"This the Indian Financial years like FY 21 ,FY 22 ,FY 23 ,FY 24 and so on. if it is FY 21 it means Financial year 2021. these are the values in data FY 21 ,FY 22 ,FY 23 ,FY 24"},
+                            },
+                        }, 
+                    },   
+                },
+                {
+                "type": "function",
+                    "function": {
+                        "name": "top_beats",
+                        "description": "This function gives the top beats by their average sales in respective sates",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "states": {
+                                    "type": "string",
+                                    "description": "The Indian state, e.g. Kerala, Tamil Nadu, Andhra Pradesh, Telangana, Karnataka,Puducherry, Pondicherry it can be multiple states or a single state, use the full names",
+                                },
+                                "fy": {"type": "string", "description":"This the Indian Financial years like FY 21 ,FY 22 ,FY 23 ,FY 24 and so on. if it is FY 21 it means Financial year 2021. these are the values in data FY 21 ,FY 22 ,FY 23 ,FY 24"},
+                            },
+                        }, 
+                    },  
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "new_outlets",
+                        "description": "This function gives the details of new oultes or shops by sates and and also the number of new outlets",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "states": {
+                                    "type": "string",
+                                    "description": "The Indian state, e.g. Kerala, Tamil Nadu, Andhra Pradesh, Telangana, Karnataka,Puducherry, Pondicherry it can be multiple states or a single state, use the full names",
+                                },
+                                "fy": {"type": "string", "description":"This the Indian Financial years like FY 21 ,FY 22 ,FY 23 ,FY 24 and so on. if it is FY 21 it means Financial year 2021. these are the values in data FY 21 ,FY 22 ,FY 23 ,FY 24"},
+                            },
+                        }, 
+                    },   
+                }
+            ]
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo-16k",
+                messages=messages,
+                tools=tools,
+                tool_choice="auto",  # auto is default, but we'll be explicit
+            )
+            response_message = response.choices[0].message
+            tool_calls = response_message.tool_calls
+            # Step 2: check if the model wanted to call a function
+            if tool_calls:
+                # Step 3: call the function
+                # Note: the JSON response may not always be valid; be sure to handle errors
+                available_functions = {
+                    "pie_chart_states": pie_chart_states,
+                    # "trend_chart": trend_chart,
+                    # "outlets_metrics": outlets_metrics,
+                    # "map_chart": map_chart,
+                    # "top_sel_sku":top_sel_sku,
+                    # "top_salesmen":top_salesmen,
+                    # "top_beats":top_beats,
+                    # "new_outlets":new_outlets,
+                }  # only one function in this example, but you can have multiple
+                messages.append(response_message)  # extend conversation with assistant's reply
+                # Step 4: send the info for each function call and function response to the model
+                for tool_call in tool_calls:
+                    function_name = tool_call.function.name
+                    function_to_call = available_functions[function_name]
+                    function_args = json.loads(tool_call.function.arguments)
+                    function_response = function_to_call(
+                        states=function_args.get("states"),
+                        fy=function_args.get("fy")
+                    )
+                    messages.append(
+                {
+                    "tool_call_id": tool_call.id,
+                    "role": "tool",
+                    "name": function_name,
+                    "content": list(function_response)[1]
+                }
+            )  # extend conversation with function response
+                print(messages)
+                try:
+                    second_response = client.chat.completions.create(
+                        model="gpt-3.5-turbo-1106",
+                        messages=messages,
+                    )
+                    return st.write(second_response.choices[0].message.content)
+                except:
+                    pass
+                    
+        else:
+            return None
+    
+
+    # Run the main function
+    if __name__ == '__main__':
+        main()
