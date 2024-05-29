@@ -24,63 +24,15 @@ from datetime import datetime, timedelta
 import yaml
 from yaml.loader import SafeLoader
 
+conn_str="Driver={ODBC Driver 18 for SQL Server};Server=tcp:ukcotestserver.database.windows.net,1433;Database=ukcotestdb;Uid=Saif;Pwd=Ukcotest@;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
+conn = odbc.connect(conn_str)
+cursor = conn.cursor()
+
 openai_secret_key = os.getenv('openaikey')
-client = OpenAI(api_key=openai_secret_key)
+client = OpenAI(api_key=openai_secret_key
 col1,=st.columns(1)
 with col1:
     st.image('uk_co_logo.jpg',width=150)
-
-
-# --- USER AUTHENTICATION ---
-with open('config.yaml') as file:
-    config = yaml.load(file, Loader=SafeLoader)
-
-authenticator = stauth.Authenticate(
-    config['credentials'],
-    config['cookie']['name'],
-    config['cookie']['key'],
-    config['cookie']['expiry_days'],
-    config['pre-authorized']
-)
-names = ["Saif Ali Khan", "Sid Pai"]
-usernames = ["saifkhan@ukco.in", "sid@ukco.in"]
-
-# load hashed passwords
-# file_path = Path(__file__).parent / "hashed_pw.pkl"
-# with file_path.open("rb") as file:
-#     hashed_passwords = pickle.load(file)
-
-# credentials = {
-#         "usernames":{
-#             usernames[0]:{
-#                 "name":names[0],
-#                 "password":passwords[0]
-#                 },
-#             usernames[1]:{
-#                 "name":names[1],
-#                 "password":passwords[1]
-#                 }            
-#             }
-#         }
-
-# authenticator = stauth.Authenticate(names, usernames, hashed_passwords,"DataBase Assistant", "abcdef", cookie_expiry_days=30)
-
-# name, authenticator.login(form_name='main'), username = authenticator.login("Login", "main")
-name, authentication_status, username = authenticator.login()
-
-@st.cache_data
-def fetch_data_from_mysql():
-    conn_str="Driver={ODBC Driver 18 for SQL Server};Server=tcp:ukcotestserver.database.windows.net,1433;Database=ukcotestdb;Uid=Saif;Pwd=Ukcotest@;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
-    with pyodbc.connect(conn_str) as conn:
-        query = '''
-            SELECT * FROM Naturo.NaturoSecondarySales3;
-        '''
-
-        df = pd.read_sql(sql=query, con=conn)
-
-    df['orderdate']=df['orderdate'].apply(lambda x :datetime.strptime(x, '%Y-%m-%d').date())
-
-    return df
 
 
 def download_button(object_to_download, download_filename, button_text, pickle_it=False):
@@ -165,8 +117,21 @@ def download_button(object_to_download, download_filename, button_text, pickle_i
 
     return dl_link
 
+# --- USER AUTHENTICATION ---
+with open('config.yaml') as file:
+    config = yaml.load(file, Loader=SafeLoader)
 
+authenticator = stauth.Authenticate(
+    config['credentials'],
+    config['cookie']['name'],
+    config['cookie']['key'],
+    config['cookie']['expiry_days'],
+    config['pre-authorized']
+)
+names = ["Saif Ali Khan", "Sid Pai"]
+usernames = ["saifkhan@ukco.in", "sid@ukco.in"]
 
+name, authentication_status, username = authenticator.login()
 
 if authentication_status == False:
     st.error("Username/password is incorrect")
@@ -176,36 +141,75 @@ if authentication_status == None:
 
 
 if authentication_status:
-    # st.write("Done")
+    st.title(' :robot_face: Gyani')
+    filename = 'Output.xlsx'
+    with col1:
+        st.header(f"Welcome {name}")
     authenticator.logout()
-    st.sidebar.title(f"Welcome {name}")
-    # print(authenticator.login(form_name='main')[0])
-    # Main function to run the Streamlit app
     def main():
-        st.title(' :robot_face: DataBase Assistant')
-        filename = 'Result.xlsx'
-        # Loading animation while fetching data
-        with st.spinner('Loading data...'):
-            # Fetch data from MySQL database
-            df = fetch_data_from_mysql()
-         # ---- SIDEBAR ----
-        with st.sidebar:
-            st.write("Select Date Range")
+        with pyodbc.connect(conn_str) as min_date_conn:
+            query = '''
+                SELECT MIN(time) as min_date from Naturo.sales_mvisit;
+            '''
+        min_date = pd.read_sql(sql=query, con=min_date_conn)
+        
+
+        with pyodbc.connect(conn_str) as max_date_conn:
+            query = '''
+                SELECT MAX(time) as max_date from Naturo.sales_mvisit;
+            '''
+        max_date = pd.read_sql(sql=query, con=max_date_conn)
 
         with st.sidebar:
-            start_date = st.date_input("Start Date", df['orderdate'].min())
-            end_date = st.date_input("End Date", df['orderdate'].max())
-            # Filter the DataFrame based on the selected date range
-        filtered_df = df[(df['orderdate'] >= start_date) & (df['orderdate'] <= end_date)]
+            start_date=st.date_input("Start Date",min_date['min_date'][0])
+            end_date=st.date_input("End Date",max_date['max_date'][0])
 
-
+        start_date=start_date.strftime('%Y%m%d')
+        end_date=end_date.strftime('%Y%m%d')
 
         def pie_chart_states(states=None,fy=None):
-            fig_pie = px.pie(filtered_df, values='price', names='state',
-                    title='Emp Conribution')
-            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-            return st.plotly_chart(fig_pie),str(dict(filtered_df.groupby([("state")]).aggregate({'price':'sum'})))
+            with pyodbc.connect(conn_str) as conn:
+                query = '''
+                    SELECT region, SUM(net_value) as sales FROM
+                    (SELECT Naturo.sales_mvisit.time, Naturo.sales_mvisit.outlet_guid, Naturo.sales_mvisit.net_value, Naturo.moutlet4.region FROM Naturo.sales_mvisit
+                    INNER JOIN  Naturo.moutlet4 ON Naturo.sales_mvisit.outlet_guid=Naturo.moutlet4.outlet_guid
+                    WHERE Naturo.sales_mvisit.net_value>0 AND Naturo.sales_mvisit.time BETWEEN '{}' and '{}') AS tb
+                    GROUP BY region;
+                '''.format(start_date,end_date)
 
+            df = pd.read_sql(sql=query, con=conn)
+            fig_pie = px.pie(df, values='sales', names='region',
+                    title='Sales Distribution')
+            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+            download_button_str=download_button(df, filename, f'Click here to download {filename}', pickle_it=False)
+            st.markdown(download_button_str, unsafe_allow_html=True)
+            return st.plotly_chart(fig_pie)
+        
+        # Function to create trend chart
+        def trend_chart(states=None,fy=None):
+            with pyodbc.connect(conn_str) as conn:
+                    query = '''
+                            SELECT time, region, SUM(net_value) as Sales FROM
+                            (SELECT Naturo.sales_mvisit.time, Naturo.sales_mvisit.outlet_guid, Naturo.sales_mvisit.net_value, Naturo.moutlet4.region FROM Naturo.sales_mvisit
+                            INNER JOIN  Naturo.moutlet4 ON Naturo.sales_mvisit.outlet_guid=Naturo.moutlet4.outlet_guid
+                            WHERE Naturo.sales_mvisit.net_value>0 AND Naturo.sales_mvisit.time BETWEEN '{}' and '{}') AS tb
+                            GROUP BY time, region;
+                    '''.format(start_date,end_date)
+            df = pd.read_sql(sql=query, con=conn)
+            if states is None:
+                fig_trend = px.line(df.groupby('time').aggregate({'Sales':'sum'}).reset_index(), x='time', y="Sales")
+                fig_trend.update_traces(mode = 'lines',line_color='blue')
+                download_button_str=download_button(df.groupby('time').aggregate({'Sales':'sum'}).reset_index(), filename, f'Click here to download {filename}', pickle_it=False)
+                st.markdown(download_button_str, unsafe_allow_html=True)
+            else:
+                l_states=states.split(',')
+                l_states=[i.strip() for i in l_states]
+                fil_df=df.loc[df['region'].isin(l_states)]
+                fig_trend = px.line(fil_df.groupby('time').aggregate({'Sales':'sum'}).reset_index(), x='time', y="Sales")
+                fig_trend.update_traces(mode = 'lines',line_color='blue')
+                download_button_str=download_button(fil_df.groupby('time').aggregate({'Sales':'sum'}).reset_index(), filename, f'Click here to download {filename}', pickle_it=False)
+                st.markdown(download_button_str, unsafe_allow_html=True)
+            return st.plotly_chart(fig_trend)
         input_text=st.text_input(label="Ask your question...")
         if input_text:
             messages = [{"role": "user", "content": "Yor are acting as a search engine of sales data base. And the sale is in Indian Rupees"}]
@@ -332,7 +336,7 @@ if authentication_status:
                     },  
                 },
                 {
-                    "type": "function",
+                 "type": "function",
                     "function": {
                         "name": "new_outlets",
                         "description": "This function gives the details of new oultes or shops by sates and and also the number of new outlets",
@@ -363,13 +367,7 @@ if authentication_status:
                 # Note: the JSON response may not always be valid; be sure to handle errors
                 available_functions = {
                     "pie_chart_states": pie_chart_states,
-                    # "trend_chart": trend_chart,
-                    # "outlets_metrics": outlets_metrics,
-                    # "map_chart": map_chart,
-                    # "top_sel_sku":top_sel_sku,
-                    # "top_salesmen":top_salesmen,
-                    # "top_beats":top_beats,
-                    # "new_outlets":new_outlets,
+                    "trend_chart": trend_chart,
                 }  # only one function in this example, but you can have multiple
                 messages.append(response_message)  # extend conversation with assistant's reply
                 # Step 4: send the info for each function call and function response to the model
@@ -386,7 +384,7 @@ if authentication_status:
                     "tool_call_id": tool_call.id,
                     "role": "tool",
                     "name": function_name,
-                    "content": list(function_response)[1]
+                    "content": function_response
                 }
             )  # extend conversation with function response
                 print(messages)
@@ -401,7 +399,13 @@ if authentication_status:
                     
         else:
             return None
+        
+        
     
+
+
+
+
 
     # Run the main function
     if __name__ == '__main__':
