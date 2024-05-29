@@ -6,3 +6,4 @@ openai
 PyYAML
 streamlit-authenticator
 streamlit_dynamic_filters
+openpyxl
