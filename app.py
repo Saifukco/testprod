@@ -29,7 +29,7 @@ conn = odbc.connect(conn_str)
 cursor = conn.cursor()
 
 openai_secret_key = os.getenv('openaikey')
-client = OpenAI(api_key=openai_secret_key
+client = OpenAI(api_key=openai_secret_key)
 col1,=st.columns(1)
 with col1:
     st.image('uk_co_logo.jpg',width=150)
