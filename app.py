@@ -25,7 +25,7 @@ import yaml
 from yaml.loader import SafeLoader
 
 conn_str="Driver={ODBC Driver 18 for SQL Server};Server=tcp:ukcotestserver.database.windows.net,1433;Database=ukcotestdb;Uid=Saif;Pwd=Ukcotest@;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
-conn = odbc.connect(conn_str)
+conn = pyodbc.connect(conn_str)
 cursor = conn.cursor()
 
 openai_secret_key = os.getenv('openaikey')
