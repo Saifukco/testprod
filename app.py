@@ -1,4 +1,5 @@
 import streamlit as st
+from math import radians, cos, sin, asin, sqrt
 import os
 import streamlit_authenticator as stauth
 from pathlib import Path
@@ -210,6 +211,74 @@ if authentication_status:
                 download_button_str=download_button(fil_df.groupby('time').aggregate({'Sales':'sum'}).reset_index(), filename, f'Click here to download {filename}', pickle_it=False)
                 st.markdown(download_button_str, unsafe_allow_html=True)
             return st.plotly_chart(fig_trend)
+
+        
+        # Function to create visits map
+        def map_chart(states,fy=None):
+            def remove_comma_before_parenthesis(text):
+                # Regex pattern to find a comma before a closing parenthesis
+                pattern = r',(?=\))'
+                # Substitute the comma with an empty string
+                result = re.sub(pattern, '', text)
+                return result
+            l_states=states.split(',')
+            l_states=[i.strip() for i in l_states]
+            str_states=str(tuple(l_states))
+            str_states=remove_comma_before_parenthesis(str_states)
+            with pyodbc.connect(conn_str) as conn:
+                    query = '''
+                            SELECT Naturo.sales_mvisit.time, Naturo.sales_mvisit.outlet_guid, Naturo.sales_mvisit.net_value, Naturo.moutlet4.region, Naturo.moutlet4.outlet_name, Naturo.moutlet4.outlet_type, Naturo.moutlet4.contact_no, Naturo.moutlet4.latitude, Naturo.moutlet4.longitude, Naturo.moutlet4.territory, Naturo.moutlet4.beat_name FROM Naturo.sales_mvisit
+                            INNER JOIN  Naturo.moutlet4 ON Naturo.sales_mvisit.outlet_guid=Naturo.moutlet4.outlet_guid
+                            WHERE Naturo.moutlet4.latitude!='No Data' AND Naturo.moutlet4.latitude!='0.0' AND Naturo.moutlet4.region IN {} AND Naturo.sales_mvisit.time BETWEEN '{}' and '{}'
+                    '''.format(str_states,start_date,end_date)
+            df = pd.read_sql(sql=query, con=conn)
+            df['latitude']=df['latitude'].astype(float)
+            df['longitude']=df['longitude'].astype(float)
+            dynamic_filters = DynamicFilters(df, filters=['territory', 'beat_name', 'outlet_type'])
+            dynamic_filters.display_filters(location='columns', num_columns=2, gap='large')
+            filtered_df=dynamic_filters.filter_df()
+            mean_lat = filtered_df['latitude'].mean()
+            mean_lon = filtered_df['latitude'].mean()
+
+            # Calculate distance between points and set zoom level accordingly
+            def haversine(lon1, lat1, lon2, lat2):
+                """
+                Calculate the great circle distance between two points 
+                on the earth (specified in decimal degrees)
+                """
+                lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
+                dlon = lon2 - lon1
+                dlat = lat2 - lat1
+                a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+                c = 2 * asin(sqrt(a))
+                r = 6371  # Radius of earth in kilometers. Use 3956 for miles.
+                return c * r
+
+            distances = []
+            for index, row in df.iterrows():
+                dist = haversine(mean_lon, mean_lat, row['longitude'], row['latitude'])
+                distances.append(dist)
+
+            max_distance = max(distances)
+            mapbox_zoom = round(8 - max_distance / 1000)  # Adjust the divisor as needed for proper zoom level
+
+            # Create map plot with automatic zoom
+            fig = px.scatter_mapbox(filtered_df, lat='latitude', lon='longitude', hover_name='outlet_name',color='region', color_discrete_sequence=px.colors.qualitative.Dark24)
+
+            # Update layout for map style and zoom level
+            fig.update_layout(mapbox_style='open-street-map',
+                            mapbox_zoom=mapbox_zoom,
+                            mapbox_center={'lat': mean_lat, 'lon': mean_lon},
+                            margin={'r':0,'t':0,'l':0,'b':0})
+            # Add legend to the plot
+            fig.update_traces(showlegend=True)
+
+            return st.plotly_chart(fig)
+
+
+
+
+        
         input_text=st.text_input(label="Ask your question...")
         if input_text:
             messages = [{"role": "user", "content": "Yor are acting as a search engine of sales data base. And the sale is in Indian Rupees"}]
@@ -368,6 +437,7 @@ if authentication_status:
                 available_functions = {
                     "pie_chart_states": pie_chart_states,
                     "trend_chart": trend_chart,
+                    "map_chart": map_chart,
                 }  # only one function in this example, but you can have multiple
                 messages.append(response_message)  # extend conversation with assistant's reply
                 # Step 4: send the info for each function call and function response to the model
